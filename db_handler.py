@@ -34,7 +34,6 @@ def add_item(new_item: Item = None):
     new_sk_id = cur.fetchone()[0]
     cur.execute("INSERT INTO item (i_item_sk, i_item_id, i_rec_start_date, i_product_name, i_brand, i_category, i_manufact, i_current_price, i_num_owned) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (new_sk_id, new_item.item_id, f"{new_item.start_year}-01-01", new_item.product_name, new_item.brand, new_item.category, new_item.manufact, new_item.current_price, new_item.num_owned))
-    conn.commit()
     # raise NotImplementedError("you must implement this function")
 
 
@@ -62,7 +61,6 @@ def add_customer(new_customer: Customer = None):
     name = new_customer.name.split()
     cur.execute("INSERT INTO customer (c_customer_sk, c_customer_id, c_first_name, c_last_name, c_email_address, c_current_addr_sk) VALUES (?, ?, ?, ?, ?, ?)",
                 (new_sk_id, new_customer.customer_id, name[0], name[1], new_customer.email, new_address_id))
-    conn.commit()
     # raise NotImplementedError("you must implement this function")
 
 
@@ -186,12 +184,16 @@ def save_changes():
     """
     Commits all changes made to the db.
     """
-    raise NotImplementedError("you must implement this function")
+    conn.commit()
+    # raise NotImplementedError("you must implement this function")
 
 
 def close_connection():
     """
     Closes the cursor and connection.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.close()
+    conn.close()
+
+    # raise NotImplementedError("you must implement this function")
 
