@@ -69,7 +69,27 @@ def edit_customer(original_customer_id: str = None, new_customer: Customer = Non
     original_customer_id - A string containing the customer id for the customer to be edited.
     new_customer - A Customer object containing attributes to update. If an attribute is None, it should not be altered.
     """
-    raise NotImplementedError("you must implement this function")
+    # check name field
+    if new_customer.name is not None:
+        name = new_customer.name.split()
+        cur.execute("UPDATE customer SET c_first_name = ?, c_last_name = ? WHERE c_customer_id = ?",
+                    (name[0], name[1], original_customer_id))
+        
+    # check email field
+    if new_customer.email is not None:
+        cur.execute("UPDATE customer SET c_email_address = ? WHERE c_customer_id = ?",
+                    (new_customer.email, original_customer_id))
+
+    # check address field
+    if new_customer.address is not None:
+        # get the customer's current address id
+        cur.execute("SELECT c_current_addr_sk FROM customer WHERE c_customer_id = ?", (original_customer_id,))
+        address_id = cur.fetchone()[0]
+        # update the address
+        address = new_customer.address.split(", ")
+        cur.execute("UPDATE customer_address SET ca_street_number = ?, ca_street_name = ?, ca_city = ?, ca_state = ?, ca_zip = ? WHERE ca_address_sk = ?",
+                    (address[0].split(" ", 1)[0], address[0].split(" ", 1)[1], address[1], address[2].split()[0], address[2].split()[1], address_id))
+    # raise NotImplementedError("you must implement this function")
 
 
 def rent_item(item_id: str = None, customer_id: str = None):
@@ -116,6 +136,7 @@ def get_filtered_items(filter_attributes: Item = None,
     """
     Returns a list of Item objects matching the filters.
     """
+    # 
     raise NotImplementedError("you must implement this function")
 
 
