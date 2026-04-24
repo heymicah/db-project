@@ -134,21 +134,31 @@ def update_waitlist(item_id: str = None):
     """
     Removes person at position 1 and shifts everyone else down by 1.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("DELETE FROM waitlist WHERE item_id = ? AND place_in_line = 1", (item_id,))
+    cur.execute("UPDATE waitlist SET place_in_line = place_in_line - 1 WHERE item_id = ?", (item_id,))
+    # raise NotImplementedError("you must implement this function")
 
 
 def return_item(item_id: str = None, customer_id: str = None):
     """
     Moves a rental from rental to rental_history with return_date = today.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT rental_date, due_date FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    rental_info = cur.fetchone()
+    cur.execute("INSERT INTO rental_history (item_id, customer_id, rental_date, due_date, return_date) VALUES (?, ?, ?, ?, ?)",
+                (item_id, customer_id, rental_info[0], rental_info[1], date.today()))
+    cur.execute("DELETE FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    # update the waitlist for the item
+    update_waitlist(item_id)
+    # raise NotImplementedError("you must implement this function")
 
 
 def grant_extension(item_id: str = None, customer_id: str = None):
     """
     Adds 14 days to the due_date.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("UPDATE rental SET due_date = DATE_ADD(due_date, INTERVAL 14 DAY) WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    # raise NotImplementedError("you must implement this function")
 
 
 def get_filtered_items(filter_attributes: Item = None,
@@ -226,8 +236,6 @@ def get_filtered_items(filter_attributes: Item = None,
         params.append(filter_attributes.num_owned)
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
-    print(query)
-    print(params)
     cur.execute(query, params)
     items = []
     for (item_id, rec_start_date, product_name, brand, category, manufact, current_price, num_owned) in cur:
@@ -341,21 +349,36 @@ def number_in_stock(item_id: str = None) -> int:
     """
     Returns num_owned - active rentals. Returns -1 if item doesn't exist.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT i_num_owned FROM item WHERE i_item_id = ?", (item_id,))
+    result = cur.fetchone()
+    if result is None:
+        return -1
+    num_owned = result[0]
+    cur.execute("SELECT COUNT(*) FROM rental WHERE item_id = ?", (item_id,))
+    num_rented = cur.fetchone()[0]
+    return num_owned - num_rented
+    # raise NotImplementedError("you must implement this function")
 
 
 def place_in_line(item_id: str = None, customer_id: str = None) -> int:
     """
     Returns the customer's place_in_line, or -1 if not on waitlist.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    result = cur.fetchone()
+    if result is None:
+        return -1
+    return result[0]
+    # raise NotImplementedError("you must implement this function")
 
 
 def line_length(item_id: str = None) -> int:
     """
     Returns how many people are on the waitlist for this item.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("SELECT COUNT(*) FROM waitlist WHERE item_id = ?", (item_id,))
+    return cur.fetchone()[0]
+    # raise NotImplementedError("you must implement this function")
 
 
 def save_changes():
