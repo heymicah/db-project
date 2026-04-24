@@ -136,8 +136,79 @@ def get_filtered_items(filter_attributes: Item = None,
     """
     Returns a list of Item objects matching the filters.
     """
-    # 
-    raise NotImplementedError("you must implement this function")
+    '''
+     self.item_id = item_id
+        self.product_name = product_name
+        self.brand = brand
+        self.category = category
+        self.manufact = manufact
+        self.current_price = current_price
+        self.start_year = start_year
+        self.num_owned = num_owned
+    '''
+    cur.execute("SELECT i_item_id, i_product_name, i_brand, i_category, i_manufact, i_current_price, YEAR(i_rec_start_date), i_num_owned FROM item")
+    items = []
+    for (item_id, product_name, brand, category, manufact, current_price, start_year, num_owned) in cur:
+        item = Item()
+        if filter_attributes.item_id is not None:
+            if use_patterns:
+                if filter_attributes.item_id not in item_id:
+                    continue
+            else:
+                if filter_attributes.item_id != item_id:
+                    continue
+        item.item_id = item_id
+        if filter_attributes.product_name is not None:
+            if use_patterns:
+                if filter_attributes.product_name not in product_name:
+                    continue
+            else:
+                if filter_attributes.product_name != product_name:
+                    continue
+        item.product_name = product_name
+        if filter_attributes.brand is not None:
+            if use_patterns:
+                if filter_attributes.brand not in brand:
+                    continue
+            else:
+                if filter_attributes.brand != brand:
+                    continue
+        item.brand = brand
+        if filter_attributes.category is not None:
+            if use_patterns:
+                if filter_attributes.category not in category:
+                    continue
+            else:
+                if filter_attributes.category != category:
+                    continue
+        item.category = category
+        if filter_attributes.manufact is not None:
+            if use_patterns:
+                if filter_attributes.manufact not in manufact:
+                    continue
+            else:
+                if filter_attributes.manufact != manufact:
+                    continue
+        item.manufact = manufact
+        if filter_attributes.current_price is not None:
+            if min_price != -1 and current_price < min_price:
+                continue
+            if max_price != -1 and current_price > max_price:
+                continue
+        item.current_price = current_price
+        if filter_attributes.start_year is not None:
+            if min_start_year != -1 and start_year < min_start_year:
+                continue
+            if max_start_year != -1 and start_year > max_start_year:
+                continue
+        item.start_year = start_year
+        if filter_attributes.num_owned is not None:
+            if filter_attributes.num_owned != num_owned:
+                continue
+        item.num_owned = num_owned
+        items.append(item)
+    return items
+    # raise NotImplementedError("you must implement this function")
 
 
 def get_filtered_customers(filter_attributes: Customer = None, use_patterns: bool = False) -> list[Customer]:
