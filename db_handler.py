@@ -69,6 +69,13 @@ def edit_customer(original_customer_id: str = None, new_customer: Customer = Non
     original_customer_id - A string containing the customer id for the customer to be edited.
     new_customer - A Customer object containing attributes to update. If an attribute is None, it should not be altered.
     """
+
+    # check customer_id field
+    if new_customer.customer_id is not None:
+        cur.execute("UPDATE customer SET c_customer_id = ? WHERE c_customer_id = ?",
+                    (new_customer.customer_id, original_customer_id))
+        original_customer_id = new_customer.customer_id
+
     # check name field
     if new_customer.name is not None:
         name = new_customer.name.split()
@@ -85,10 +92,21 @@ def edit_customer(original_customer_id: str = None, new_customer: Customer = Non
         # get the customer's current address id
         cur.execute("SELECT c_current_addr_sk FROM customer WHERE c_customer_id = ?", (original_customer_id,))
         address_id = cur.fetchone()[0]
+        if address_id is None:
+            # if the customer doesn't have an address, insert a new one and update the customer record to point to it
+            cur.execute("SELECT COALESCE(MAX(ca_address_sk), 0) + 1 FROM customer_address")
+            new_address_id = cur.fetchone()[0]
+            address = new_customer.address.split(", ")
+            cur.execute("INSERT INTO customer_address (ca_address_sk, ca_street_number, ca_street_name, ca_city, ca_state, ca_zip) VALUES (?, ?, ?, ?, ?, ?)",
+                        (new_address_id, address[0].split(" ", 1)[0], address[0].split(" ", 1)[1], address[1], address[2].split()[0], address[2].split()[1]))
+            cur.execute("UPDATE customer SET c_current_addr_sk = ? WHERE c_customer_id = ?",
+                        (new_address_id, original_customer_id))
+        else:
         # update the address
-        address = new_customer.address.split(", ")
-        cur.execute("UPDATE customer_address SET ca_street_number = ?, ca_street_name = ?, ca_city = ?, ca_state = ?, ca_zip = ? WHERE ca_address_sk = ?",
-                    (address[0].split(" ", 1)[0], address[0].split(" ", 1)[1], address[1], address[2].split()[0], address[2].split()[1], address_id))
+            address = new_customer.address.split(", ")
+            cur.execute("UPDATE customer_address SET ca_street_number = ?, ca_street_name = ?, ca_city = ?, ca_state = ?, ca_zip = ? WHERE ca_address_sk = ?",
+                        (address[0].split(" ", 1)[0], address[0].split(" ", 1)[1], address[1], address[2].split()[0], address[2].split()[1], address_id))
+    
     # raise NotImplementedError("you must implement this function")
 
 
@@ -97,14 +115,20 @@ def rent_item(item_id: str = None, customer_id: str = None):
     item_id - A string containing the Item ID for the item being rented.
     customer_id - A string containing the customer id of the customer renting the item.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("INSERT INTO rental (item_id, customer_id, rental_date, due_date) VALUES (?, ?, ?, ?)",
+                (item_id, customer_id, date.today(), date.today() + timedelta(days=14)))
+    # raise NotImplementedError("you must implement this function")
 
 
 def waitlist_customer(item_id: str = None, customer_id: str = None) -> int:
     """
     Returns the customer's new place in line.
     """
-    raise NotImplementedError("you must implement this function")
+    cur.execute("INSERT INTO waitlist (item_id, customer_id, place_in_line) VALUES (?, ?, COALESCE((SELECT MAX(place_in_line) + 1 FROM waitlist WHERE item_id = ?), 1))", 
+                (item_id, customer_id, item_id))
+    cur.execute("SELECT place_in_line FROM waitlist WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
+    return cur.fetchone()[0]
+    # raise NotImplementedError("you must implement this function")
 
 def update_waitlist(item_id: str = None):
     """
@@ -146,65 +170,75 @@ def get_filtered_items(filter_attributes: Item = None,
         self.start_year = start_year
         self.num_owned = num_owned
     '''
-    cur.execute("SELECT i_item_id, i_product_name, i_brand, i_category, i_manufact, i_current_price, YEAR(i_rec_start_date), i_num_owned FROM item")
+    query = "SELECT i_item_id, i_rec_start_date, i_product_name, i_brand, i_category, i_manufact, i_current_price, i_num_owned FROM item"
+    conditions = []
+    params = []
+    if filter_attributes.item_id is not None:
+        if use_patterns:
+            conditions.append("i_item_id LIKE ?")
+        else:
+            conditions.append("i_item_id = ?")
+        params.append(filter_attributes.item_id)
+    if filter_attributes.product_name is not None:
+        if use_patterns:
+            conditions.append("i_product_name LIKE ?")
+        else:
+            conditions.append("i_product_name = ?")
+        params.append(filter_attributes.product_name)
+    if filter_attributes.brand is not None:
+        if use_patterns:
+            conditions.append("i_brand LIKE ?")
+        else:
+            conditions.append("i_brand = ?")
+        params.append(filter_attributes.brand)
+    if filter_attributes.category is not None:
+        if use_patterns:
+            conditions.append("i_category LIKE ?")
+        else:
+            conditions.append("i_category = ?")
+        params.append(filter_attributes.category)
+    if filter_attributes.manufact is not None:
+        if use_patterns:
+            conditions.append("i_manufact LIKE ?")
+        else:
+            conditions.append("i_manufact = ?")
+        params.append(filter_attributes.manufact)
+    if filter_attributes.current_price != -1:
+        if min_price != -1:
+            conditions.append("i_current_price >= ?")
+            params.append(min_price)
+        if max_price != -1:
+            conditions.append("i_current_price <= ?")
+            params.append(max_price)
+        conditions.append("i_current_price = ?")
+        params.append(filter_attributes.current_price)
+    if filter_attributes.start_year != -1:
+        if min_start_year != -1:
+            conditions.append("YEAR(i_rec_start_date) >= ?")
+            params.append(min_start_year)
+        if max_start_year != -1:
+            conditions.append("YEAR(i_rec_start_date) <= ?")
+            params.append(max_start_year)
+        conditions.append("YEAR(i_rec_start_date) = ?")
+        params.append(filter_attributes.start_year)
+    if filter_attributes.num_owned != -1:
+        conditions.append("i_num_owned = ?")
+        params.append(filter_attributes.num_owned)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    print(query)
+    print(params)
+    cur.execute(query, params)
     items = []
-    for (item_id, product_name, brand, category, manufact, current_price, start_year, num_owned) in cur:
+    for (item_id, rec_start_date, product_name, brand, category, manufact, current_price, num_owned) in cur:
         item = Item()
-        if filter_attributes.item_id is not None:
-            if use_patterns:
-                if filter_attributes.item_id not in item_id:
-                    continue
-            else:
-                if filter_attributes.item_id != item_id:
-                    continue
         item.item_id = item_id
-        if filter_attributes.product_name is not None:
-            if use_patterns:
-                if filter_attributes.product_name not in product_name:
-                    continue
-            else:
-                if filter_attributes.product_name != product_name:
-                    continue
         item.product_name = product_name
-        if filter_attributes.brand is not None:
-            if use_patterns:
-                if filter_attributes.brand not in brand:
-                    continue
-            else:
-                if filter_attributes.brand != brand:
-                    continue
         item.brand = brand
-        if filter_attributes.category is not None:
-            if use_patterns:
-                if filter_attributes.category not in category:
-                    continue
-            else:
-                if filter_attributes.category != category:
-                    continue
         item.category = category
-        if filter_attributes.manufact is not None:
-            if use_patterns:
-                if filter_attributes.manufact not in manufact:
-                    continue
-            else:
-                if filter_attributes.manufact != manufact:
-                    continue
         item.manufact = manufact
-        if filter_attributes.current_price is not None:
-            if min_price != -1 and current_price < min_price:
-                continue
-            if max_price != -1 and current_price > max_price:
-                continue
         item.current_price = current_price
-        if filter_attributes.start_year is not None:
-            if min_start_year != -1 and start_year < min_start_year:
-                continue
-            if max_start_year != -1 and start_year > max_start_year:
-                continue
-        item.start_year = start_year
-        if filter_attributes.num_owned is not None:
-            if filter_attributes.num_owned != num_owned:
-                continue
+        item.start_year = rec_start_date.year
         item.num_owned = num_owned
         items.append(item)
     return items
@@ -215,7 +249,59 @@ def get_filtered_customers(filter_attributes: Customer = None, use_patterns: boo
     """
     Returns a list of Customer objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    '''
+    self.customer_id = customer_id
+        self.name = name
+        self.address = address
+        self.email = email
+    '''
+    query = "SELECT c_customer_id, c_first_name, c_last_name, c_email_address, ca_street_number, ca_street_name, ca_city, ca_state, ca_zip FROM customer LEFT JOIN customer_address ON c_current_addr_sk = ca_address_sk"
+    conditions = []
+    params = []
+    if filter_attributes.customer_id is not None:
+        if use_patterns:
+            conditions.append("c_customer_id LIKE ?")
+        else:
+            conditions.append("c_customer_id = ?")
+        params.append(filter_attributes.customer_id)
+    if filter_attributes.name is not None:
+        name = filter_attributes.name.split(" ", 1)
+        if use_patterns:
+            conditions.append("c_first_name LIKE ? AND c_last_name LIKE ?")
+        else:
+            conditions.append("c_first_name = ? AND c_last_name = ?")
+        params.append(name[0])
+        params.append(name[1])
+    if filter_attributes.email is not None:
+        if use_patterns:
+            conditions.append("c_email_address LIKE ?")
+        else:
+            conditions.append("c_email_address = ?")
+        params.append(filter_attributes.email)
+    if filter_attributes.address is not None:
+        address = filter_attributes.address.split(", ")
+        if use_patterns:
+            conditions.append("ca_street_number LIKE ? AND ca_street_name LIKE ? AND ca_city LIKE ? AND ca_state LIKE ? AND ca_zip LIKE ?")
+        else:
+            conditions.append("ca_street_number = ? AND ca_street_name = ? AND ca_city = ? AND ca_state = ? AND ca_zip = ?")
+        params.append(address[0].split(" ", 1)[0])
+        params.append(address[0].split(" ", 1)[1])
+        params.append(address[1])
+        params.append(address[2].split()[0])
+        params.append(address[2].split()[1])
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    cur.execute(query, params)
+    customers = []
+    for (customer_id, first_name, last_name, email, street_number, street_name, city, state, zip_code) in cur:
+        customer = Customer()
+        customer.customer_id = customer_id
+        customer.name = f"{first_name} {last_name}"
+        customer.email = email
+        customer.address = f"{street_number} {street_name}, {city}, {state} {zip_code}"
+        customers.append(customer)
+    return customers
+    # raise NotImplementedError("you must implement this function")
 
 
 def get_filtered_rentals(filter_attributes: Rental = None,
