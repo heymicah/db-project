@@ -143,10 +143,12 @@ def return_item(item_id: str = None, customer_id: str = None):
     """
     Moves a rental from rental to rental_history with return_date = today.
     """
+    # get the rental info
     cur.execute("SELECT rental_date, due_date FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
     rental_info = cur.fetchone()
     cur.execute("INSERT INTO rental_history (item_id, customer_id, rental_date, due_date, return_date) VALUES (?, ?, ?, ?, ?)",
                 (item_id, customer_id, rental_info[0], rental_info[1], date.today()))
+    # delete rental
     cur.execute("DELETE FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
     # update the waitlist for the item
     update_waitlist(item_id)
@@ -180,6 +182,7 @@ def get_filtered_items(filter_attributes: Item = None,
         self.start_year = start_year
         self.num_owned = num_owned
     '''
+    # setup query structure
     query = "SELECT i_item_id, i_rec_start_date, i_product_name, i_brand, i_category, i_manufact, i_current_price, i_num_owned FROM item"
     conditions = []
     params = []
@@ -223,17 +226,18 @@ def get_filtered_items(filter_attributes: Item = None,
         conditions.append("i_current_price = ?")
         params.append(filter_attributes.current_price)
     if filter_attributes.start_year != -1:
-        if min_start_year != -1:
-            conditions.append("YEAR(i_rec_start_date) >= ?")
-            params.append(min_start_year)
-        if max_start_year != -1:
-            conditions.append("YEAR(i_rec_start_date) <= ?")
-            params.append(max_start_year)
         conditions.append("YEAR(i_rec_start_date) = ?")
         params.append(filter_attributes.start_year)
+    if min_start_year != -1:
+        conditions.append("YEAR(i_rec_start_date) >= ?")
+        params.append(min_start_year)
+    if max_start_year != -1:
+        conditions.append("YEAR(i_rec_start_date) <= ?")
+        params.append(max_start_year)
     if filter_attributes.num_owned != -1:
         conditions.append("i_num_owned = ?")
         params.append(filter_attributes.num_owned)
+    #  join the conditions
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     cur.execute(query, params)
@@ -245,8 +249,8 @@ def get_filtered_items(filter_attributes: Item = None,
         item.brand = brand
         item.category = category
         item.manufact = manufact
-        item.current_price = current_price
-        item.start_year = rec_start_date.year
+        item.current_price = float(current_price)
+        item.start_year = rec_start_date.year if rec_start_date is not None else -1 # handle null start year
         item.num_owned = num_owned
         items.append(item)
     return items
@@ -263,6 +267,7 @@ def get_filtered_customers(filter_attributes: Customer = None, use_patterns: boo
         self.address = address
         self.email = email
     '''
+    # setup query structure
     query = "SELECT c_customer_id, c_first_name, c_last_name, c_email_address, ca_street_number, ca_street_name, ca_city, ca_state, ca_zip FROM customer LEFT JOIN customer_address ON c_current_addr_sk = ca_address_sk"
     conditions = []
     params = []
@@ -287,16 +292,19 @@ def get_filtered_customers(filter_attributes: Customer = None, use_patterns: boo
             conditions.append("c_email_address = ?")
         params.append(filter_attributes.email)
     if filter_attributes.address is not None:
+        # structure address
         address = filter_attributes.address.split(", ")
         if use_patterns:
             conditions.append("ca_street_number LIKE ? AND ca_street_name LIKE ? AND ca_city LIKE ? AND ca_state LIKE ? AND ca_zip LIKE ?")
         else:
             conditions.append("ca_street_number = ? AND ca_street_name = ? AND ca_city = ? AND ca_state = ? AND ca_zip = ?")
+        # split street number and name and split state and zip
         params.append(address[0].split(" ", 1)[0])
         params.append(address[0].split(" ", 1)[1])
         params.append(address[1])
         params.append(address[2].split()[0])
         params.append(address[2].split()[1])
+    # join the conditions
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
     cur.execute(query, params)
@@ -320,7 +328,54 @@ def get_filtered_rentals(filter_attributes: Rental = None,
     """
     Returns a list of Rental objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    '''
+    self.item_id = item_id
+        self.customer_id = customer_id
+        self.rental_date = rental_date
+        self.due_date = due_date
+    '''
+    # setup query structure
+    query = "SELECT item_id, customer_id, rental_date, due_date FROM rental"
+    conditions = []
+    params = []
+    if filter_attributes.item_id is not None:
+        conditions.append("item_id = ?")
+        params.append(filter_attributes.item_id)
+    if filter_attributes.customer_id is not None:
+        conditions.append("customer_id = ?")
+        params.append(filter_attributes.customer_id)
+    if filter_attributes.rental_date is not None:
+        conditions.append("rental_date = ?")
+        params.append(filter_attributes.rental_date)
+    if min_rental_date is not None:
+        conditions.append("rental_date >= ?")
+        params.append(min_rental_date)
+    if max_rental_date is not None:
+        conditions.append("rental_date <= ?")
+        params.append(max_rental_date)
+    if filter_attributes.due_date is not None:
+        conditions.append("due_date = ?")
+        params.append(filter_attributes.due_date)
+    if min_due_date is not None:
+        conditions.append("due_date >= ?")
+        params.append(min_due_date)
+    if max_due_date is not None:
+        conditions.append("due_date <= ?")
+        params.append(max_due_date)
+    # join the conditions
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    cur.execute(query, params)
+    rentals = []
+    for (item_id, customer_id, rental_date, due_date) in cur:
+        rental = Rental()
+        rental.item_id = item_id
+        rental.customer_id = customer_id
+        rental.rental_date = rental_date
+        rental.due_date = due_date
+        rentals.append(rental)
+    return rentals
+    # raise NotImplementedError("you must implement this function")
 
 
 def get_filtered_rental_histories(filter_attributes: RentalHistory = None,
@@ -333,7 +388,56 @@ def get_filtered_rental_histories(filter_attributes: RentalHistory = None,
     """
     Returns a list of RentalHistory objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    query = "SELECT item_id, customer_id, rental_date, due_date, return_date FROM rental_history"
+    conditions = []
+    params = []
+    if filter_attributes.item_id is not None:
+        conditions.append("item_id = ?")
+        params.append(filter_attributes.item_id)
+    if filter_attributes.customer_id is not None:
+        conditions.append("customer_id = ?")
+        params.append(filter_attributes.customer_id)
+    if filter_attributes.rental_date is not None:
+        conditions.append("rental_date = ?")
+        params.append(filter_attributes.rental_date)
+    if min_rental_date is not None:
+        conditions.append("rental_date >= ?")
+        params.append(min_rental_date)
+    if max_rental_date is not None:
+        conditions.append("rental_date <= ?")
+        params.append(max_rental_date)
+    if filter_attributes.due_date is not None:
+        conditions.append("due_date = ?")
+        params.append(filter_attributes.due_date)
+    if min_due_date is not None:
+        conditions.append("due_date >= ?")
+        params.append(min_due_date)
+    if max_due_date is not None:
+        conditions.append("due_date <= ?")
+        params.append(max_due_date)
+    if filter_attributes.return_date is not None:
+        conditions.append("return_date = ?")
+        params.append(filter_attributes.return_date)
+    if min_return_date is not None:
+        conditions.append("return_date >= ?")
+        params.append(min_return_date)
+    if max_return_date is not None:
+        conditions.append("return_date <= ?")
+        params.append(max_return_date)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    cur.execute(query, params)
+    rental_histories = []
+    for (item_id, customer_id, rental_date, due_date, return_date) in cur:
+        rental_history = RentalHistory()
+        rental_history.item_id = item_id
+        rental_history.customer_id = customer_id
+        rental_history.rental_date = rental_date
+        rental_history.due_date = due_date
+        rental_history.return_date = return_date
+        rental_histories.append(rental_history)
+    return rental_histories
+    # raise NotImplementedError("you must implement this function")
 
 
 def get_filtered_waitlist(filter_attributes: Waitlist = None,
@@ -342,18 +446,49 @@ def get_filtered_waitlist(filter_attributes: Waitlist = None,
     """
     Returns a list of Waitlist objects matching the filters.
     """
-    raise NotImplementedError("you must implement this function")
+    query = "SELECT item_id, customer_id, place_in_line FROM waitlist"
+    conditions = []
+    params = []
+    if filter_attributes.item_id is not None:
+        conditions.append("item_id = ?")
+        params.append(filter_attributes.item_id)
+    if filter_attributes.customer_id is not None:
+        conditions.append("customer_id = ?")
+        params.append(filter_attributes.customer_id)
+    if filter_attributes.place_in_line != -1:
+        conditions.append("place_in_line = ?")
+        params.append(filter_attributes.place_in_line)
+    if min_place_in_line != -1:
+        conditions.append("place_in_line >= ?")
+        params.append(min_place_in_line)
+    if max_place_in_line != -1:
+        conditions.append("place_in_line <= ?")
+        params.append(max_place_in_line)
+    if conditions:
+        query += " WHERE " + " AND ".join(conditions)
+    cur.execute(query, params)
+    waitlist_entries = []
+    for (item_id, customer_id, place_in_line) in cur:
+        waitlist = Waitlist()
+        waitlist.item_id = item_id
+        waitlist.customer_id = customer_id
+        waitlist.place_in_line = place_in_line
+        waitlist_entries.append(waitlist)
+    return waitlist_entries
+    # raise NotImplementedError("you must implement this function")
 
 
 def number_in_stock(item_id: str = None) -> int:
     """
     Returns num_owned - active rentals. Returns -1 if item doesn't exist.
     """
+    # get num owned
     cur.execute("SELECT i_num_owned FROM item WHERE i_item_id = ?", (item_id,))
     result = cur.fetchone()
     if result is None:
         return -1
     num_owned = result[0]
+    # get num rented
     cur.execute("SELECT COUNT(*) FROM rental WHERE item_id = ?", (item_id,))
     num_rented = cur.fetchone()[0]
     return num_owned - num_rented
