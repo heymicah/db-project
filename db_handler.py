@@ -116,7 +116,7 @@ def rent_item(item_id: str = None, customer_id: str = None):
     customer_id - A string containing the customer id of the customer renting the item.
     """
     cur.execute("INSERT INTO rental (item_id, customer_id, rental_date, due_date) VALUES (?, ?, ?, ?)",
-                (item_id, customer_id, date.today(), date.today() + timedelta(days=14)))
+                (item_id, customer_id, str(date.today()), str(date.today() + timedelta(days=14))))
     # raise NotImplementedError("you must implement this function")
 
 
@@ -147,7 +147,7 @@ def return_item(item_id: str = None, customer_id: str = None):
     cur.execute("SELECT rental_date, due_date FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
     rental_info = cur.fetchone()
     cur.execute("INSERT INTO rental_history (item_id, customer_id, rental_date, due_date, return_date) VALUES (?, ?, ?, ?, ?)",
-                (item_id, customer_id, rental_info[0], rental_info[1], date.today()))
+                (item_id, customer_id, rental_info[0], rental_info[1], str(date.today())))
     # delete rental
     cur.execute("DELETE FROM rental WHERE item_id = ? AND customer_id = ?", (item_id, customer_id))
     # update the waitlist for the item
@@ -217,14 +217,14 @@ def get_filtered_items(filter_attributes: Item = None,
             conditions.append("i_manufact = ?")
         params.append(filter_attributes.manufact)
     if filter_attributes.current_price != -1:
-        if min_price != -1:
-            conditions.append("i_current_price >= ?")
-            params.append(min_price)
-        if max_price != -1:
-            conditions.append("i_current_price <= ?")
-            params.append(max_price)
         conditions.append("i_current_price = ?")
         params.append(filter_attributes.current_price)
+    if min_price != -1:
+        conditions.append("i_current_price >= ?")
+        params.append(min_price)
+    if max_price != -1:
+        conditions.append("i_current_price <= ?")
+        params.append(max_price)
     if filter_attributes.start_year != -1:
         conditions.append("YEAR(i_rec_start_date) = ?")
         params.append(filter_attributes.start_year)
@@ -279,12 +279,14 @@ def get_filtered_customers(filter_attributes: Customer = None, use_patterns: boo
         params.append(filter_attributes.customer_id)
     if filter_attributes.name is not None:
         name = filter_attributes.name.split(" ", 1)
-        if use_patterns:
-            conditions.append("c_first_name LIKE ? AND c_last_name LIKE ?")
+        operator = "LIKE" if use_patterns else "="
+        if len(name) == 2:
+            conditions.append(f"c_first_name {operator} ? AND c_last_name {operator} ?")
+            params.append(name[0])
+            params.append(name[1])
         else:
-            conditions.append("c_first_name = ? AND c_last_name = ?")
-        params.append(name[0])
-        params.append(name[1])
+            conditions.append(f"c_first_name {operator} ?")
+            params.append(name[0])
     if filter_attributes.email is not None:
         if use_patterns:
             conditions.append("c_email_address LIKE ?")
@@ -292,18 +294,24 @@ def get_filtered_customers(filter_attributes: Customer = None, use_patterns: boo
             conditions.append("c_email_address = ?")
         params.append(filter_attributes.email)
     if filter_attributes.address is not None:
-        # structure address
-        address = filter_attributes.address.split(", ")
         if use_patterns:
-            conditions.append("ca_street_number LIKE ? AND ca_street_name LIKE ? AND ca_city LIKE ? AND ca_state LIKE ? AND ca_zip LIKE ?")
+            conditions.append(
+                "(ca_street_number LIKE ? OR ca_street_name LIKE ? OR ca_city LIKE ? OR ca_state LIKE ? OR ca_zip LIKE ?)"
+            )
+            # match any of the address elements to the pattern
+            params.extend([filter_attributes.address] * 5)
         else:
-            conditions.append("ca_street_number = ? AND ca_street_name = ? AND ca_city = ? AND ca_state = ? AND ca_zip = ?")
-        # split street number and name and split state and zip
-        params.append(address[0].split(" ", 1)[0])
-        params.append(address[0].split(" ", 1)[1])
-        params.append(address[1])
-        params.append(address[2].split()[0])
-        params.append(address[2].split()[1])
+            address = filter_attributes.address.split(", ")
+            street = address[0].split(" ", 1) if len(address) >= 1 else [] # handle missing street
+            state_zip = address[2].split() if len(address) >= 3 else [] # handle missing state/zip
+            conditions.append(
+                "ca_street_number = ? AND ca_street_name = ? AND ca_city = ? AND ca_state = ? AND ca_zip = ?"
+            )
+            params.append(street[0])
+            params.append(street[1])
+            params.append(address[1])
+            params.append(state_zip[0])
+            params.append(state_zip[1])
     # join the conditions
     if conditions:
         query += " WHERE " + " AND ".join(conditions)
@@ -371,8 +379,8 @@ def get_filtered_rentals(filter_attributes: Rental = None,
         rental = Rental()
         rental.item_id = item_id
         rental.customer_id = customer_id
-        rental.rental_date = rental_date
-        rental.due_date = due_date
+        rental.rental_date = str(rental_date)
+        rental.due_date = str(due_date)
         rentals.append(rental)
     return rentals
     # raise NotImplementedError("you must implement this function")
@@ -432,9 +440,9 @@ def get_filtered_rental_histories(filter_attributes: RentalHistory = None,
         rental_history = RentalHistory()
         rental_history.item_id = item_id
         rental_history.customer_id = customer_id
-        rental_history.rental_date = rental_date
-        rental_history.due_date = due_date
-        rental_history.return_date = return_date
+        rental_history.rental_date = str(rental_date)
+        rental_history.due_date = str(due_date)
+        rental_history.return_date = str(return_date)
         rental_histories.append(rental_history)
     return rental_histories
     # raise NotImplementedError("you must implement this function")
